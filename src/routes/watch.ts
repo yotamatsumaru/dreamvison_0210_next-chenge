@@ -53,6 +53,7 @@ watch.post('/verify', async (c) => {
         id: event.id,
         title: event.title,
         slug: event.slug,
+        description: event.description,
         eventType: event.event_type,
         status: event.status,
       },

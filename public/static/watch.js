@@ -1,6 +1,7 @@
-// Watch page - Video player
+// Watch page - Native HTML5 Video player with HLS.js support
 
-let player = null;
+let hls = null;
+let videoElement = null;
 
 async function initializePlayer() {
     const container = document.getElementById('watch-container');
@@ -43,15 +44,27 @@ async function initializePlayer() {
         
         const { streamUrl, useSigned } = streamResponse.data;
         
-        // Create video player
+        // Determine if it's HLS or MP4
+        const isHLS = streamUrl.includes('.m3u8');
+        const isMP4 = streamUrl.includes('.mp4');
+        
+        // Create video player with native HTML5 video tag
         container.innerHTML = `
-            <div class="relative">
-                <video id="video-player" 
-                       class="video-js vjs-big-play-centered vjs-16-9 w-full"
-                       controls
-                       preload="auto"
-                       data-setup='{}'>
-                </video>
+            <div class="relative bg-black">
+                <div class="max-w-7xl mx-auto">
+                    <video 
+                        id="videoPlayer" 
+                        class="w-full aspect-video"
+                        controls 
+                        autoplay 
+                        playsinline 
+                        webkit-playsinline
+                        muted
+                        ${isMP4 ? `src="${streamUrl}"` : ''}
+                    >
+                        お使いのブラウザは動画タグをサポートしていません。
+                    </video>
+                </div>
                 
                 <div class="max-w-7xl mx-auto px-4 py-6">
                     <h1 class="text-3xl font-bold text-white mb-2">${event.title}</h1>
@@ -62,75 +75,145 @@ async function initializePlayer() {
                         </span>
                         ${event.status === 'live' ? '<span class="text-red-500"><i class="fas fa-circle animate-pulse mr-1"></i>配信中</span>' : ''}
                     </div>
+                    
+                    <div class="mt-4 text-gray-400 text-sm">
+                        <p class="whitespace-pre-line">${event.description || ''}</p>
+                    </div>
                 </div>
             </div>
         `;
         
-        // Initialize Video.js player
-        player = videojs('video-player', {
-            controls: true,
-            autoplay: false,
-            preload: 'auto',
-            fluid: true,
-            aspectRatio: '16:9',
-            sources: [{
-                src: streamUrl,
-                type: event.eventType === 'live' ? 'application/x-mpegURL' : 'application/x-mpegURL'
-            }]
-        });
+        videoElement = document.getElementById('videoPlayer');
         
-        // Handle player errors
-        player.on('error', function() {
-            const error = player.error();
-            console.error('Player error:', error);
+        // For HLS streams, use HLS.js if available
+        if (isHLS) {
+            if (Hls.isSupported()) {
+                hls = new Hls({
+                    debug: false,
+                    enableWorker: true,
+                    lowLatencyMode: event.eventType === 'live',
+                    backBufferLength: 90
+                });
+                
+                hls.loadSource(streamUrl);
+                hls.attachMedia(videoElement);
+                
+                hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                    console.log('HLS manifest loaded, starting playback');
+                    videoElement.play().catch(e => {
+                        console.log('Autoplay prevented:', e);
+                        // User interaction required for autoplay
+                    });
+                });
+                
+                hls.on(Hls.Events.ERROR, function(event, data) {
+                    console.error('HLS error:', data);
+                    
+                    if (data.fatal) {
+                        switch(data.type) {
+                            case Hls.ErrorTypes.NETWORK_ERROR:
+                                console.error('Fatal network error, trying to recover');
+                                hls.startLoad();
+                                break;
+                            case Hls.ErrorTypes.MEDIA_ERROR:
+                                console.error('Fatal media error, trying to recover');
+                                hls.recoverMediaError();
+                                break;
+                            default:
+                                console.error('Fatal error, cannot recover');
+                                showError('配信の再生中にエラーが発生しました。ページをリロードしてください。');
+                                break;
+                        }
+                    }
+                });
+                
+            } else if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
+                // Native HLS support (Safari)
+                videoElement.src = streamUrl;
+                videoElement.addEventListener('loadedmetadata', function() {
+                    console.log('Native HLS loaded');
+                    videoElement.play().catch(e => {
+                        console.log('Autoplay prevented:', e);
+                    });
+                });
+            } else {
+                showError('お使いのブラウザはHLS配信をサポートしていません。');
+                return;
+            }
+        }
+        
+        // Video event listeners
+        videoElement.addEventListener('error', function(e) {
+            console.error('Video error:', e);
+            const error = videoElement.error;
+            let errorMessage = '動画の再生中にエラーが発生しました。';
             
-            container.innerHTML = `
-                <div class="max-w-4xl mx-auto px-4 py-12">
-                    <div class="bg-red-900 bg-opacity-20 border border-red-800 rounded-xl p-8 text-center">
-                        <i class="fas fa-exclamation-triangle text-red-500 text-4xl mb-4"></i>
-                        <h2 class="text-2xl font-bold text-white mb-2">再生エラー</h2>
-                        <p class="text-gray-300 mb-4">動画の再生中にエラーが発生しました。</p>
-                        <p class="text-gray-400 text-sm mb-4">エラーコード: ${error ? error.code : 'Unknown'}</p>
-                        <button onclick="location.reload()" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg transition">
-                            <i class="fas fa-redo mr-2"></i>
-                            再読み込み
-                        </button>
-                    </div>
-                </div>
-            `;
+            if (error) {
+                switch(error.code) {
+                    case error.MEDIA_ERR_ABORTED:
+                        errorMessage = '動画の読み込みが中断されました。';
+                        break;
+                    case error.MEDIA_ERR_NETWORK:
+                        errorMessage = 'ネットワークエラーが発生しました。';
+                        break;
+                    case error.MEDIA_ERR_DECODE:
+                        errorMessage = '動画のデコードに失敗しました。';
+                        break;
+                    case error.MEDIA_ERR_SRC_NOT_SUPPORTED:
+                        errorMessage = 'この動画形式はサポートされていません。';
+                        break;
+                }
+            }
+            
+            showError(errorMessage);
         });
         
-        // Log player events
-        player.on('loadstart', () => console.log('Loading video...'));
-        player.on('canplay', () => console.log('Video ready to play'));
-        player.on('playing', () => console.log('Video playing'));
+        videoElement.addEventListener('loadstart', () => console.log('Loading video...'));
+        videoElement.addEventListener('canplay', () => console.log('Video ready to play'));
+        videoElement.addEventListener('playing', () => console.log('Video playing'));
         
     } catch (error) {
         console.error('Failed to initialize player:', error);
         
-        container.innerHTML = `
-            <div class="max-w-4xl mx-auto px-4 py-12">
-                <div class="bg-red-900 bg-opacity-20 border border-red-800 rounded-xl p-8 text-center">
-                    <i class="fas fa-exclamation-triangle text-red-500 text-4xl mb-4"></i>
-                    <h2 class="text-2xl font-bold text-white mb-2">アクセスエラー</h2>
-                    <p class="text-gray-300 mb-4">
-                        ${error.response?.status === 401 
-                            ? '無効または期限切れのアクセストークンです。'
-                            : 'ストリームへのアクセスに失敗しました。'}
-                    </p>
-                    <a href="/events" class="inline-block bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg transition">
+        let errorMessage = 'ストリームへのアクセスに失敗しました。';
+        if (error.response?.status === 401) {
+            errorMessage = '無効または期限切れのアクセストークンです。';
+        }
+        
+        showError(errorMessage);
+    }
+}
+
+function showError(message) {
+    const container = document.getElementById('watch-container');
+    container.innerHTML = `
+        <div class="max-w-4xl mx-auto px-4 py-12">
+            <div class="bg-red-900 bg-opacity-20 border border-red-800 rounded-xl p-8 text-center">
+                <i class="fas fa-exclamation-triangle text-red-500 text-4xl mb-4"></i>
+                <h2 class="text-2xl font-bold text-white mb-2">再生エラー</h2>
+                <p class="text-gray-300 mb-4">${message}</p>
+                <div class="flex gap-4 justify-center">
+                    <button onclick="location.reload()" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg transition">
+                        <i class="fas fa-redo mr-2"></i>
+                        再読み込み
+                    </button>
+                    <a href="/events" class="inline-block bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-lg transition">
                         イベント一覧に戻る
                     </a>
                 </div>
             </div>
-        `;
-    }
+        </div>
+    `;
 }
 
 // Cleanup on page unload
 window.addEventListener('beforeunload', () => {
-    if (player) {
-        player.dispose();
+    if (hls) {
+        hls.destroy();
+    }
+    if (videoElement) {
+        videoElement.pause();
+        videoElement.src = '';
     }
 });
 

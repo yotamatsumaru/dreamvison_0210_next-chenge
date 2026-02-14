@@ -398,7 +398,6 @@ app.get('/watch/:eventSlug', (c) => {
         <title>視聴ページ - StreamingPlatform</title>
         <script src="https://cdn.tailwindcss.com"></script>
         <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet">
-        <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet">
     </head>
     <body class="bg-black min-h-screen">
         <div id="watch-container">
@@ -409,7 +408,7 @@ app.get('/watch/:eventSlug', (c) => {
         </div>
 
         <script src="https://cdn.jsdelivr.net/npm/axios@1.6.0/dist/axios.min.js"></script>
-        <script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
         <script>
             const eventSlug = '${eventSlug}';
             const accessToken = '${token || ''}';
