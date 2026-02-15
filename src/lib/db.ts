@@ -22,6 +22,47 @@ export class Database {
     return result.meta.last_row_id || 0;
   }
 
+  async updateArtist(id: number, data: Partial<Artist>): Promise<void> {
+    const fields: string[] = [];
+    const values: any[] = [];
+
+    if (data.name !== undefined) {
+      fields.push('name = ?');
+      values.push(data.name);
+    }
+    if (data.description !== undefined) {
+      fields.push('description = ?');
+      values.push(data.description);
+    }
+    if (data.image_url !== undefined) {
+      fields.push('image_url = ?');
+      values.push(data.image_url);
+    }
+
+    if (fields.length === 0) {
+      return;
+    }
+
+    fields.push('updated_at = CURRENT_TIMESTAMP');
+    values.push(id);
+
+    const query = `UPDATE artists SET ${fields.join(', ')} WHERE id = ?`;
+    await this.db.prepare(query).bind(...values).run();
+  }
+
+  async deleteArtist(id: number): Promise<void> {
+    // Delete related tickets first
+    await this.db.prepare(
+      'DELETE FROM tickets WHERE event_id IN (SELECT id FROM events WHERE artist_id = ?)'
+    ).bind(id).run();
+    
+    // Delete related events
+    await this.db.prepare('DELETE FROM events WHERE artist_id = ?').bind(id).run();
+    
+    // Delete artist
+    await this.db.prepare('DELETE FROM artists WHERE id = ?').bind(id).run();
+  }
+
   // Events
   async getEvents(filters?: { artistId?: number; status?: string }): Promise<Event[]> {
     let query = 'SELECT * FROM events WHERE 1=1';

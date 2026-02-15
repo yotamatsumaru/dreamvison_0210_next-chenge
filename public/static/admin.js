@@ -359,6 +359,13 @@ async function loadArtists() {
         
         const container = document.getElementById('artists-content');
         container.innerHTML = `
+            <div class="mb-6">
+                <button onclick="createArtist()" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg transition">
+                    <i class="fas fa-plus mr-2"></i>
+                    新しいアーティストを追加
+                </button>
+            </div>
+            
             <div class="grid md:grid-cols-3 gap-6">
                 ${artists.map(artist => `
                     <div class="bg-black bg-opacity-40 backdrop-blur-md rounded-xl overflow-hidden border border-gray-800">
@@ -369,7 +376,15 @@ async function loadArtists() {
                         </div>
                         <div class="p-4">
                             <h3 class="text-white font-bold text-lg">${artist.name}</h3>
-                            <p class="text-gray-400 text-sm mt-1">${artist.description || ''}</p>
+                            <p class="text-gray-400 text-sm mt-1 mb-3">${artist.description || ''}</p>
+                            <div class="flex space-x-2">
+                                <button onclick="editArtist(${artist.id})" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded transition text-sm">
+                                    <i class="fas fa-edit mr-1"></i>編集
+                                </button>
+                                <button onclick="deleteArtist(${artist.id}, '${artist.name}')" class="bg-red-600 hover:bg-red-700 text-white py-2 px-4 rounded transition text-sm">
+                                    <i class="fas fa-trash mr-1"></i>削除
+                                </button>
+                            </div>
                         </div>
                     </div>
                 `).join('')}
@@ -377,6 +392,199 @@ async function loadArtists() {
         `;
     } catch (error) {
         console.error('Failed to load artists:', error);
+    }
+}
+
+// Create new artist
+async function createArtist() {
+    const container = document.getElementById('artists-content');
+    container.innerHTML = `
+        <div class="bg-black bg-opacity-40 backdrop-blur-md rounded-xl p-6 border border-gray-800 max-w-2xl">
+            <h3 class="text-2xl font-bold text-white mb-6">新しいアーティストを追加</h3>
+            <form id="create-artist-form" class="space-y-4">
+                <div>
+                    <label class="block text-gray-300 mb-2">アーティスト名 *</label>
+                    <input type="text" id="artist-name" required
+                           class="w-full bg-gray-900 text-white px-4 py-2 rounded border border-gray-700 focus:border-purple-500 focus:outline-none"
+                           placeholder="例: REIRIE">
+                </div>
+                
+                <div>
+                    <label class="block text-gray-300 mb-2">スラッグ (URL用) *</label>
+                    <input type="text" id="artist-slug" required
+                           class="w-full bg-gray-900 text-white px-4 py-2 rounded border border-gray-700 focus:border-purple-500 focus:outline-none"
+                           placeholder="例: reirie (英数字とハイフンのみ)">
+                    <p class="text-gray-500 text-sm mt-1">
+                        URLに使用されます（例: /artists/reirie）
+                    </p>
+                </div>
+                
+                <div>
+                    <label class="block text-gray-300 mb-2">説明文</label>
+                    <textarea id="artist-description" rows="4"
+                              class="w-full bg-gray-900 text-white px-4 py-2 rounded border border-gray-700 focus:border-purple-500 focus:outline-none"
+                              placeholder="アーティストのプロフィールや紹介文を入力してください"></textarea>
+                </div>
+                
+                <div>
+                    <label class="block text-gray-300 mb-2">
+                        <i class="fas fa-image mr-1"></i>
+                        画像URL
+                    </label>
+                    <input type="url" id="artist-image-url"
+                           class="w-full bg-gray-900 text-white px-4 py-2 rounded border border-gray-700 focus:border-purple-500 focus:outline-none"
+                           placeholder="https://example.com/artist-image.jpg">
+                    <p class="text-gray-500 text-sm mt-1">
+                        アーティストの画像URL（推奨サイズ: 400x400px）
+                    </p>
+                </div>
+                
+                <div class="flex space-x-4 pt-4">
+                    <button type="submit" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg transition">
+                        <i class="fas fa-plus mr-2"></i>
+                        追加
+                    </button>
+                    <button type="button" onclick="loadArtists()" class="bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-lg transition">
+                        <i class="fas fa-times mr-2"></i>
+                        キャンセル
+                    </button>
+                </div>
+            </form>
+        </div>
+    `;
+    
+    // Form submit handler
+    document.getElementById('create-artist-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const newArtist = {
+            name: document.getElementById('artist-name').value,
+            slug: document.getElementById('artist-slug').value,
+            description: document.getElementById('artist-description').value,
+            image_url: document.getElementById('artist-image-url').value,
+        };
+        
+        try {
+            await adminAPI('post', '/api/admin/artists', newArtist);
+            alert('アーティストを追加しました');
+            loadArtists();
+        } catch (error) {
+            console.error('Failed to create artist:', error);
+            alert('追加に失敗しました: ' + (error.response?.data?.error || error.message));
+        }
+    });
+}
+
+// Edit artist
+async function editArtist(artistId) {
+    try {
+        const response = await adminAPI('get', '/api/admin/artists');
+        const artist = response.data.find(a => a.id === artistId);
+        
+        if (!artist) {
+            alert('アーティストが見つかりません');
+            return;
+        }
+        
+        const container = document.getElementById('artists-content');
+        container.innerHTML = `
+            <div class="bg-black bg-opacity-40 backdrop-blur-md rounded-xl p-6 border border-gray-800 max-w-2xl">
+                <h3 class="text-2xl font-bold text-white mb-6">アーティスト編集</h3>
+                <form id="edit-artist-form" class="space-y-4">
+                    <div>
+                        <label class="block text-gray-300 mb-2">アーティスト名 *</label>
+                        <input type="text" id="artist-name" value="${artist.name}" required
+                               class="w-full bg-gray-900 text-white px-4 py-2 rounded border border-gray-700 focus:border-purple-500 focus:outline-none">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-gray-300 mb-2">スラッグ (URL用)</label>
+                        <input type="text" id="artist-slug" value="${artist.slug}" disabled
+                               class="w-full bg-gray-800 text-gray-500 px-4 py-2 rounded border border-gray-700 cursor-not-allowed">
+                        <p class="text-gray-500 text-sm mt-1">
+                            スラッグは編集できません（既存のURLを保護するため）
+                        </p>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-gray-300 mb-2">説明文</label>
+                        <textarea id="artist-description" rows="4"
+                                  class="w-full bg-gray-900 text-white px-4 py-2 rounded border border-gray-700 focus:border-purple-500 focus:outline-none">${artist.description || ''}</textarea>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-gray-300 mb-2">
+                            <i class="fas fa-image mr-1"></i>
+                            画像URL
+                        </label>
+                        <input type="url" id="artist-image-url" value="${artist.image_url || ''}"
+                               class="w-full bg-gray-900 text-white px-4 py-2 rounded border border-gray-700 focus:border-purple-500 focus:outline-none"
+                               placeholder="https://example.com/artist-image.jpg">
+                        <p class="text-gray-500 text-sm mt-1">
+                            推奨サイズ: 400x400px
+                        </p>
+                    </div>
+                    
+                    ${artist.image_url ? `
+                        <div>
+                            <label class="block text-gray-300 mb-2">現在の画像プレビュー</label>
+                            <img src="${artist.image_url}" alt="${artist.name}" class="w-32 h-32 object-cover rounded-lg border border-gray-700">
+                        </div>
+                    ` : ''}
+                    
+                    <div class="flex space-x-4 pt-4">
+                        <button type="submit" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg transition">
+                            <i class="fas fa-save mr-2"></i>
+                            保存
+                        </button>
+                        <button type="button" onclick="loadArtists()" class="bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-lg transition">
+                            <i class="fas fa-times mr-2"></i>
+                            キャンセル
+                        </button>
+                    </div>
+                </form>
+            </div>
+        `;
+        
+        // Form submit handler
+        document.getElementById('edit-artist-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const updateData = {
+                name: document.getElementById('artist-name').value,
+                description: document.getElementById('artist-description').value,
+                image_url: document.getElementById('artist-image-url').value,
+            };
+            
+            try {
+                await adminAPI('patch', `/api/admin/artists/${artistId}`, updateData);
+                alert('アーティストを更新しました');
+                loadArtists();
+            } catch (error) {
+                console.error('Failed to update artist:', error);
+                alert('更新に失敗しました');
+            }
+        });
+        
+    } catch (error) {
+        console.error('Failed to load artist:', error);
+        alert('アーティストの読み込みに失敗しました');
+    }
+}
+
+// Delete artist
+async function deleteArtist(artistId, artistName) {
+    if (!confirm(`本当に「${artistName}」を削除しますか？\n\n注意: このアーティストに関連するイベントも削除されます。`)) {
+        return;
+    }
+    
+    try {
+        await adminAPI('delete', `/api/admin/artists/${artistId}`);
+        alert('アーティストを削除しました');
+        loadArtists();
+    } catch (error) {
+        console.error('Failed to delete artist:', error);
+        alert('削除に失敗しました: ' + (error.response?.data?.error || error.message));
     }
 }
 

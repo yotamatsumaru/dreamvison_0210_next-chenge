@@ -157,6 +157,43 @@ admin.post('/artists', zValidator('json', createArtistSchema), async (c) => {
   }
 });
 
+// Update artist
+const updateArtistSchema = z.object({
+  name: z.string().optional(),
+  description: z.string().optional(),
+  image_url: z.string().optional(),
+});
+
+admin.patch('/artists/:id', zValidator('json', updateArtistSchema), async (c) => {
+  try {
+    const artistId = parseInt(c.req.param('id'));
+    const data = c.req.valid('json');
+    const db = new Database(c.env.DB);
+
+    await db.updateArtist(artistId, data);
+
+    return c.json({ message: 'Artist updated successfully' });
+  } catch (error: any) {
+    console.error('Admin update artist error:', error);
+    return c.json({ error: 'Failed to update artist', details: error.message }, 500);
+  }
+});
+
+// Delete artist
+admin.delete('/artists/:id', async (c) => {
+  try {
+    const artistId = parseInt(c.req.param('id'));
+    const db = new Database(c.env.DB);
+
+    await db.deleteArtist(artistId);
+
+    return c.json({ message: 'Artist deleted successfully' });
+  } catch (error: any) {
+    console.error('Admin delete artist error:', error);
+    return c.json({ error: 'Failed to delete artist', details: error.message }, 500);
+  }
+});
+
 // Create ticket
 const createTicketSchema = z.object({
   event_id: z.number(),
