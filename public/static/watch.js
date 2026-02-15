@@ -83,7 +83,7 @@ async function initializePlayer() {
                 </div>
             ` : ''}
             <div class="relative bg-black">
-                <div class="max-w-7xl mx-auto relative">
+                <div class="max-w-7xl mx-auto">
                     <video 
                         id="videoPlayer" 
                         class="w-full aspect-video"
@@ -96,38 +96,45 @@ async function initializePlayer() {
                     >
                         お使いのブラウザは動画タグをサポートしていません。
                     </video>
-                    
-                    <!-- Quality selector for HLS -->
-                    ${isHLS ? `
-                        <div id="quality-selector" class="absolute top-4 right-4 z-10 hidden">
-                            <div class="relative">
-                                <button id="quality-btn" onclick="toggleQualityMenu()" class="bg-black/70 hover:bg-black/90 backdrop-blur-sm text-white px-4 py-2 rounded-lg transition flex items-center space-x-2 border border-gray-600">
-                                    <i class="fas fa-cog"></i>
-                                    <span id="current-quality">自動</span>
-                                    <i class="fas fa-chevron-down text-xs"></i>
-                                </button>
-                                <div id="quality-menu" class="hidden absolute right-0 mt-2 bg-black/90 backdrop-blur-md rounded-lg border border-gray-600 min-w-[160px] shadow-xl">
-                                    <div class="py-2" id="quality-options">
-                                        <!-- Quality options will be populated here -->
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    ` : ''}
                 </div>
                 
                 <div class="max-w-7xl mx-auto px-4 py-4 md:py-6">
-                    <h1 class="text-xl md:text-3xl font-bold text-white mb-2">${event.title}</h1>
-                    <div class="flex items-center flex-wrap gap-3 md:gap-4 text-gray-400 text-sm md:text-base">
-                        <span>
-                            <i class="fas fa-${event.eventType === 'live' ? 'broadcast-tower' : 'archive'} mr-2"></i>
-                            ${event.eventType === 'live' ? 'ライブ配信' : 'アーカイブ配信'}
-                        </span>
-                        ${event.status === 'live' ? '<span class="text-red-500 text-sm md:text-base"><i class="fas fa-circle animate-pulse mr-1"></i>配信中</span>' : ''}
+                    <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-4 mb-4">
+                        <div class="flex-1">
+                            <h1 class="text-xl md:text-3xl font-bold text-white mb-2">${event.title}</h1>
+                            <div class="flex items-center flex-wrap gap-3 md:gap-4 text-gray-400 text-sm md:text-base">
+                                <span>
+                                    <i class="fas fa-${event.eventType === 'live' ? 'broadcast-tower' : 'archive'} mr-2"></i>
+                                    ${event.eventType === 'live' ? 'ライブ配信' : 'アーカイブ配信'}
+                                </span>
+                                ${event.status === 'live' ? '<span class="text-red-500 text-sm md:text-base"><i class="fas fa-circle animate-pulse mr-1"></i>配信中</span>' : ''}
+                            </div>
+                        </div>
+                        
+                        <!-- Quality selector for HLS -->
+                        ${isHLS ? `
+                            <div id="quality-selector" class="hidden">
+                                <div class="relative">
+                                    <button id="quality-btn" onclick="toggleQualityMenu()" class="bg-gray-800 hover:bg-gray-700 text-white px-4 py-2.5 rounded-lg transition flex items-center space-x-2 border border-gray-600 w-full md:w-auto justify-between md:justify-start">
+                                        <div class="flex items-center space-x-2">
+                                            <i class="fas fa-cog"></i>
+                                            <span class="font-medium">画質:</span>
+                                            <span id="current-quality" class="text-purple-400 font-semibold">自動</span>
+                                        </div>
+                                        <i class="fas fa-chevron-down text-xs ml-2"></i>
+                                    </button>
+                                    <div id="quality-menu" class="hidden absolute right-0 md:left-0 mt-2 bg-gray-900 backdrop-blur-md rounded-lg border border-gray-600 min-w-[200px] shadow-2xl z-20">
+                                        <div class="py-2" id="quality-options">
+                                            <!-- Quality options will be populated here -->
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        ` : ''}
                     </div>
                     
                     ${event.description ? `
-                        <div class="mt-3 md:mt-4 text-gray-400 text-xs md:text-sm">
+                        <div class="mt-3 md:mt-4 text-gray-400 text-xs md:text-sm border-t border-gray-800 pt-4">
                             <p class="whitespace-pre-line leading-relaxed">${event.description || ''}</p>
                         </div>
                     ` : ''}
@@ -334,8 +341,11 @@ function initializeQualitySelector() {
     
     // Add auto option
     qualityOptions.innerHTML = `
-        <button onclick="setQuality(-1)" class="w-full text-left px-4 py-2 hover:bg-gray-700 transition text-white flex items-center justify-between">
-            <span>自動</span>
+        <button onclick="setQuality(-1)" class="w-full text-left px-4 py-3 hover:bg-gray-800 transition text-white flex items-center justify-between group">
+            <div class="flex items-center space-x-2">
+                <i class="fas fa-magic text-purple-400 text-sm"></i>
+                <span class="font-medium">自動</span>
+            </div>
             <i id="quality-check-auto" class="fas fa-check text-purple-500"></i>
         </button>
     `;
@@ -347,11 +357,31 @@ function initializeQualitySelector() {
         const resolution = `${level.height}p`;
         const bitrate = (level.bitrate / 1000000).toFixed(1);
         
+        // Determine quality label
+        let qualityLabel = '';
+        let qualityIcon = 'fa-video';
+        if (level.height >= 1080) {
+            qualityLabel = 'フルHD';
+            qualityIcon = 'fa-gem';
+        } else if (level.height >= 720) {
+            qualityLabel = 'HD';
+            qualityIcon = 'fa-star';
+        } else if (level.height >= 480) {
+            qualityLabel = '標準';
+            qualityIcon = 'fa-play-circle';
+        } else {
+            qualityLabel = '軽量';
+            qualityIcon = 'fa-mobile-alt';
+        }
+        
         qualityOptions.innerHTML += `
-            <button onclick="setQuality(${originalIndex})" class="w-full text-left px-4 py-2 hover:bg-gray-700 transition text-white flex items-center justify-between">
-                <div>
-                    <div class="font-semibold">${resolution}</div>
-                    <div class="text-xs text-gray-400">${bitrate} Mbps</div>
+            <button onclick="setQuality(${originalIndex})" class="w-full text-left px-4 py-3 hover:bg-gray-800 transition text-white flex items-center justify-between group">
+                <div class="flex items-center space-x-3">
+                    <i class="fas ${qualityIcon} text-gray-400 text-sm"></i>
+                    <div>
+                        <div class="font-semibold">${resolution} <span class="text-xs text-gray-400">${qualityLabel}</span></div>
+                        <div class="text-xs text-gray-500">${bitrate} Mbps</div>
+                    </div>
                 </div>
                 <i id="quality-check-${originalIndex}" class="fas fa-check text-purple-500 hidden"></i>
             </button>
