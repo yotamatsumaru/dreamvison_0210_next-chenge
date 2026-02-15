@@ -83,7 +83,7 @@ async function initializePlayer() {
                 </div>
             ` : ''}
             <div class="relative bg-black">
-                <div class="max-w-7xl mx-auto">
+                <div class="max-w-7xl mx-auto relative">
                     <video 
                         id="videoPlayer" 
                         class="w-full aspect-video"
@@ -96,6 +96,24 @@ async function initializePlayer() {
                     >
                         お使いのブラウザは動画タグをサポートしていません。
                     </video>
+                    
+                    <!-- Quality selector for HLS -->
+                    ${isHLS ? `
+                        <div id="quality-selector" class="absolute top-4 right-4 z-10 hidden">
+                            <div class="relative">
+                                <button id="quality-btn" onclick="toggleQualityMenu()" class="bg-black/70 hover:bg-black/90 backdrop-blur-sm text-white px-4 py-2 rounded-lg transition flex items-center space-x-2 border border-gray-600">
+                                    <i class="fas fa-cog"></i>
+                                    <span id="current-quality">自動</span>
+                                    <i class="fas fa-chevron-down text-xs"></i>
+                                </button>
+                                <div id="quality-menu" class="hidden absolute right-0 mt-2 bg-black/90 backdrop-blur-md rounded-lg border border-gray-600 min-w-[160px] shadow-xl">
+                                    <div class="py-2" id="quality-options">
+                                        <!-- Quality options will be populated here -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    ` : ''}
                 </div>
                 
                 <div class="max-w-7xl mx-auto px-4 py-4 md:py-6">
@@ -146,6 +164,10 @@ async function initializePlayer() {
                 
                 hls.on(Hls.Events.MANIFEST_PARSED, function() {
                     console.log('HLS manifest loaded, starting playback');
+                    
+                    // Initialize quality selector
+                    initializeQualitySelector();
+                    
                     videoElement.play().catch(e => {
                         console.log('Autoplay prevented:', e);
                         // User interaction required for autoplay
@@ -287,6 +309,121 @@ function showError(message) {
         </div>
     `;
 }
+
+// Quality selector functions
+function initializeQualitySelector() {
+    if (!hls) return;
+    
+    const levels = hls.levels;
+    if (!levels || levels.length === 0) {
+        console.log('No quality levels available');
+        return;
+    }
+    
+    console.log('Available quality levels:', levels);
+    
+    // Show quality selector
+    const qualitySelector = document.getElementById('quality-selector');
+    if (qualitySelector) {
+        qualitySelector.classList.remove('hidden');
+    }
+    
+    // Populate quality options
+    const qualityOptions = document.getElementById('quality-options');
+    if (!qualityOptions) return;
+    
+    // Add auto option
+    qualityOptions.innerHTML = `
+        <button onclick="setQuality(-1)" class="w-full text-left px-4 py-2 hover:bg-gray-700 transition text-white flex items-center justify-between">
+            <span>自動</span>
+            <i id="quality-check-auto" class="fas fa-check text-purple-500"></i>
+        </button>
+    `;
+    
+    // Add quality options (sorted by height descending)
+    const sortedLevels = [...levels].sort((a, b) => b.height - a.height);
+    sortedLevels.forEach((level, index) => {
+        const originalIndex = levels.indexOf(level);
+        const resolution = `${level.height}p`;
+        const bitrate = (level.bitrate / 1000000).toFixed(1);
+        
+        qualityOptions.innerHTML += `
+            <button onclick="setQuality(${originalIndex})" class="w-full text-left px-4 py-2 hover:bg-gray-700 transition text-white flex items-center justify-between">
+                <div>
+                    <div class="font-semibold">${resolution}</div>
+                    <div class="text-xs text-gray-400">${bitrate} Mbps</div>
+                </div>
+                <i id="quality-check-${originalIndex}" class="fas fa-check text-purple-500 hidden"></i>
+            </button>
+        `;
+    });
+    
+    // Listen for quality changes
+    hls.on(Hls.Events.LEVEL_SWITCHED, function(event, data) {
+        updateQualityDisplay(data.level);
+    });
+}
+
+function toggleQualityMenu() {
+    const menu = document.getElementById('quality-menu');
+    if (menu) {
+        menu.classList.toggle('hidden');
+    }
+}
+
+function setQuality(levelIndex) {
+    if (!hls) return;
+    
+    console.log('Setting quality level to:', levelIndex);
+    
+    if (levelIndex === -1) {
+        // Auto quality
+        hls.currentLevel = -1;
+        updateQualityDisplay(-1);
+    } else {
+        // Manual quality
+        hls.currentLevel = levelIndex;
+        updateQualityDisplay(levelIndex);
+    }
+    
+    // Close menu
+    toggleQualityMenu();
+}
+
+function updateQualityDisplay(levelIndex) {
+    const currentQualitySpan = document.getElementById('current-quality');
+    
+    // Update checkmarks
+    const allChecks = document.querySelectorAll('[id^="quality-check-"]');
+    allChecks.forEach(check => check.classList.add('hidden'));
+    
+    if (levelIndex === -1) {
+        // Auto mode
+        if (currentQualitySpan) {
+            currentQualitySpan.textContent = '自動';
+        }
+        const autoCheck = document.getElementById('quality-check-auto');
+        if (autoCheck) autoCheck.classList.remove('hidden');
+    } else {
+        // Manual mode
+        const level = hls.levels[levelIndex];
+        if (level && currentQualitySpan) {
+            currentQualitySpan.textContent = `${level.height}p`;
+        }
+        const levelCheck = document.getElementById(`quality-check-${levelIndex}`);
+        if (levelCheck) levelCheck.classList.remove('hidden');
+    }
+}
+
+// Close quality menu when clicking outside
+document.addEventListener('click', function(event) {
+    const qualitySelector = document.getElementById('quality-selector');
+    const qualityMenu = document.getElementById('quality-menu');
+    
+    if (qualitySelector && qualityMenu && !qualitySelector.contains(event.target)) {
+        qualityMenu.classList.add('hidden');
+    }
+});
 
 // Cleanup on page unload
 window.addEventListener('beforeunload', () => {
